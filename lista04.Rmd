@@ -1,0 +1,319 @@
+---
+title: "lista04"
+author: "Gabriela Paschoal"
+date: "2025-03-09"
+output: pdf_document
+---
+
+## Livro Gilberto Paula, cap. 04 (2013)
+
+#### Sumário
+
+- [Exercício 05](#ex05)
+- [Exercício 07](#ex07)
+- [Exercício 15](#ex15)
+- [Exercício 20](#ex20)
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(nortest)
+library(AICcmodavg)
+library(lmtest)
+library(ResourceSelection)  # estatística Hosmer-Lemeshow
+library(MASS)
+
+```
+
+#### Exercício 05 {#ex05}
+
+POISSON LINK LOG
+
+Modelo Poisson com ligação log foi o que apresentou menor AIC/BIC. Os resíduos também ficaram dentro do envelope (indicativo de modelo bem ajustado). No entanto, os resíduos parecem não serem normais e serem heterocedásticos. O modelo parece estar bem especificado pelo teste RV.Os outros modelos não apresentaram melhores resultados.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'geriatra'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE,fill = TRUE)
+
+colnames(df)<-c("quedas","intervencao","sexo","balanco","forca")
+
+df$intervencao<-as.factor(df$intervencao)
+df$sexo<-as.factor(df$sexo)
+
+modelo_poi_log<-glm(quedas~intervencao+sexo,data=df,family=poisson("log"))
+modelo_poi_id<-glm(quedas~intervencao+sexo,data=df,family=poisson("identity")) # pode resultar em valores preditos negativos, o que eh uma desvantagem
+modelo_poi_sqrt<-glm(quedas~intervencao+sexo,data=df,family=poisson("sqrt"))
+
+modelo_nb_log<-glm.nb(quedas~intervencao+sexo,data=df,link='log')
+modelo_nb_id<-glm.nb(quedas~intervencao+sexo,data=df,link='identity') # pode resultar em valores preditos negativos, o que eh uma desvantagem
+modelo_nb_sqrt<-glm.nb(quedas~intervencao+sexo,data=df,link='sqrt')
+  
+
+AIC(modelo_poi_log,modelo_poi_id,modelo_poi_sqrt,modelo_nb_log,modelo_nb_id,modelo_nb_sqrt)
+BIC(modelo_poi_log,modelo_poi_id,modelo_poi_sqrt,modelo_nb_log,modelo_nb_id,modelo_nb_sqrt)
+
+
+fit.model<-modelo_poi_log
+
+summary(modelo_poi_log)
+
+source("MLG/Funcoes/envel_pois_log.txt") 
+
+res<-fit.model$residuals
+hist(res,freq=FALSE)
+
+plot(fitted(fit.model),res)
+plot(res)
+bptest(fit.model)
+
+source("MLG/Funcoes/rv.poisson.binomial.txt")
+source("MLG/Funcoes/eta2.pois.txt")
+
+eta2.pois()
+
+rm(list=ls())
+
+```
+
+#### Exercício 07 {#ex07}
+
+Modelo binomial negativo com link log apresentou menores valores para AIC e BIC e melhor gráfico envelope.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'rolos'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE,fill = TRUE)
+
+# Unir v3 à v1 e v4 à v2
+df$V1 <- as.numeric(paste(df$V1, df$V3, sep = ""))  # Sem separador
+df$V2 <- as.numeric(paste(df$V2, df$V4, sep = ""))  # Sem separador
+
+# Remover as colunas v3 e v4 (opcional)
+df <- df[, !(names(df) %in% c("V3", "V4"))]
+
+colnames(df)<-c("comp","falhas")
+
+plot(df$comp,df$falhas)
+
+modelo_pois_id<-glm(falhas~comp,data=df,family=poisson("identity"))
+modelo_pois_log<-glm(falhas~comp,data=df,family=poisson("log"))
+modelo_pois_sqrt<-glm(falhas~comp,data=df,family=poisson("sqrt"))
+
+modelo_nb_id<-glm.nb(falhas~comp,data=df,link="identity")
+modelo_nb_log<-glm.nb(falhas~comp,data=df,link="log")
+modelo_nb_sqrt<-glm.nb(falhas~comp,data=df,link="sqrt")
+
+AIC(modelo_pois_id,modelo_pois_log,modelo_pois_sqrt,modelo_nb_id,modelo_nb_log,modelo_nb_sqrt)
+BIC(modelo_pois_id,modelo_pois_log,modelo_pois_sqrt,modelo_nb_id,modelo_nb_log,modelo_nb_sqrt)
+
+summary(modelo_nb_log)
+
+fit.model<-modelo_nb_log
+source("MLG/Funcoes/envel_nbin_log.txt") 
+
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+rm(list=ls())
+
+```
+
+#### Exercício 15 {#ex15}
+
+Os modelos requisitados neste exercício foram: log-linear de Poisson, quase-verossimilhança e log-linear binomial negativo. O modelo Binomial Negativo apresentou menor AIC/BIC. Não é possível calcular essas métricas para o modelo de quase-verossimilhanç pois ele não possui uma distribuição para os dados, se baseando apenas na relação entre a média e a variância.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'recrutas'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE, fill = TRUE)
+
+colnames(df)<-c("Frequencia","Local","Faixa_Etaria","Sexo","NumeroInfeccoes")
+df$Frequencia<-as.factor(df$Frequencia)
+df$Local<-as.factor(df$Local)
+df$Faixa_Etaria<-as.factor(df$Faixa_Etaria)
+df$Sexo<-as.factor(df$Sexo)
+
+modelo_poi_log<-glm(NumeroInfeccoes~Frequencia+Local+Faixa_Etaria+Sexo,data=df,
+                    family=poisson("log"))
+
+modelo_quasi<-glm(NumeroInfeccoes~Frequencia+Local+Faixa_Etaria+Sexo,data=df,
+                    family=quasi(link="identity"))
+
+modelo_nb_log<-glm.nb(NumeroInfeccoes~Frequencia+Local+Faixa_Etaria+Sexo,data=df,link="log")
+
+summary(modelo_quasi)
+
+AIC(modelo_poi_log,modelo_quasi,modelo_nb_log)
+BIC(modelo_poi_log,modelo_quasi,modelo_nb_log)
+
+
+
+```
+
+GRÁFICOS ENVELOPE
+
+Seguem abaixo os gráficos envelope para os resíduos dos modelos Poisson Log-Linear, Quase-verossimilhança e Binomial Negativo Log-Linear, respectivamente (como não há função específica para o modelo de quase-verossimilhança, utilizei o envelope da distribuição normal, mas pode não ser o mais adequado). O modelo Binomial Negativo teve seus resíduos bem "envelopados", o que indica que esse modelo está capturando bem os padrões nos dados. Vou continuar com ele.  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+fit.model<-modelo_poi_log
+source("MLG/Funcoes/envel_pois_log.txt") 
+
+fit.model<-modelo_quasi
+source("MLG/Funcoes/envel_norm.txt") 
+
+fit.model<-modelo_nb_log
+source("MLG/Funcoes/envel_nbin_log.txt") 
+
+```
+
+VERIFICAÇÃO DAS SUPOSICOES FEITAS SOBRE O MODELO
+
+Pela análise dos gráficos a seguir, parece que os pressupostos de normalidade e homocedasticidade não foram bem atendidos.No entanto, o teste RV rejeitou a hipótese de que o modelo ficaria melhor especificado com variáveis extras, não-lineares. Por fim, 14 pontos foram considerados influentes pela distância de Cook.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+res<-modelo_nb_log$residuals
+hist(res, freq=FALSE)
+plot(res)
+abline(h=0)
+plot(fitted(modelo_nb_log),res)
+abline(h=0)
+
+source("MLG/Funcoes/rv.nb.txt")
+source("MLG/Funcoes/eta2.nb.txt")
+eta2.nb()
+
+leverage <- hatvalues(fit.model) # use para calcular os valores de leverage
+# leverage ou hii mede o quanto uma observação influencia o ajuste do modelo.
+
+n <- nrow(df)  # numero de obs
+p <- 1        # numero de variaveis independentes
+limite <- 2 * (p + 1) / n #Pontos de alavanca são geralmente identificados quando o valor de leverage é maior que 2 * (p + 1) / n.
+
+pontos_alavanca <- which(leverage > limite)
+
+plot(leverage, main = "Pontos de Alavanca", ylab = "Leverage (hii)")
+abline(h = limite, col = "red", lty = 2)
+points(pontos_alavanca, leverage[pontos_alavanca], col = "red", pch = 19)
+
+# Se você encontrar pontos de alavanca, é importante investigar se eles são influentes (usando métricas como a distância de Cook) e decidir se devem ser tratados ou removidos do modelo.
+
+cook_distance <- cooks.distance(fit.model)
+#  Distância de Cook é uma métrica que combina informações sobre leverage (pontos de alavanca) e resíduos para identificar observações que têm uma influência significativa no modelo de regressão. Pontos com uma Distância de Cook alta podem estar distorcendo os resultados do modelo.
+
+limite_cook <- 4 / n
+pontos_influentes <- which(cook_distance > limite_cook)
+
+plot(cook_distance, main = "Distancia de Cook", ylab = "Distancia de Cook")
+abline(h = limite_cook, col = "red", lty = 2)
+points(pontos_influentes, cook_distance[pontos_influentes], col = "red", pch = 19)
+
+
+
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+rm(list=ls())
+
+```
+
+
+#### Exercício 20 {#ex20}
+
+Parece não haver difereça expressiva entre o modelo Poisson Linear e o Log-Linear - o que já era esperado, pois a relação da variável explicativa (dose do herbicida) com a resposta (número de ovos eclodidos) é linear, conforme evidenciado pelo gráfico boxplot.
+
+Como não houve diferença entre os referidos modelos pelos critérios AIC, BIC ou gráfico envelope, adotarei o modelo linear por simplicidade.  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'nitrofen'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE,fill = TRUE)
+colnames(df)<-c("Dose", "Numero_Ovos")
+df$Dose<-as.factor(df$Dose)
+
+
+plot(x=df$Dose,y=df$Numero_Ovos, main="Ovos (y) por dose (x)")
+
+modelo_poi_log<-glm(Numero_Ovos~Dose,data=df,family=poisson(link="log"))
+modelo_poi_id<-glm(Numero_Ovos~Dose,data=df,family=poisson(link="identity"))
+
+
+AIC(modelo_poi_log,modelo_poi_id)
+BIC(modelo_poi_log,modelo_poi_id)
+
+fit.model<-modelo_poi_log
+source("MLG/Funcoes/envel_pois_log.txt") 
+
+fit.model<-modelo_poi_id
+source("MLG/Funcoes/envel_pois_ident.txt") 
+
+
+
+```
+
+Pela análise dos gráficos envelope, parece haver três pontos influentes no ajuste do modelo. Vamos verificar pela distância de Cook.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+leverage <- hatvalues(fit.model) # use para calcular os valores de leverage
+# leverage ou hii mede o quanto uma observação influencia o ajuste do modelo.
+
+n <- nrow(df)  # numero de obs
+p <- 1        # numero de variaveis independentes
+limite <- 2 * (p + 1) / n #Pontos de alavanca são geralmente identificados quando o valor de leverage é maior que 2 * (p + 1) / n.
+
+pontos_alavanca <- which(leverage > limite)
+
+# plot(leverage, main = "Pontos de Alavanca", ylab = "Leverage (hii)")
+# abline(h = limite, col = "red", lty = 2)
+# points(pontos_alavanca, leverage[pontos_alavanca], col = "red", pch = 19)
+
+# Se você encontrar pontos de alavanca, é importante investigar se eles são influentes (usando métricas como a distância de Cook) e decidir se devem ser tratados ou removidos do modelo.
+
+cook_distance <- cooks.distance(fit.model)
+#  Distância de Cook é uma métrica que combina informações sobre leverage (pontos de alavanca) e resíduos para identificar observações que têm uma influência significativa no modelo de regressão. Pontos com uma Distância de Cook alta podem estar distorcendo os resultados do modelo.
+
+limite_cook <- 4 / n
+pontos_influentes <- which(cook_distance > limite_cook)
+
+plot(cook_distance, main = "Distancia de Cook", ylab = "Distancia de Cook")
+abline(h = limite_cook, col = "red", lty = 2)
+points(pontos_influentes, cook_distance[pontos_influentes], col = "red", pch = 19)
+
+df[pontos_influentes,]
+
+```
+
+Quatro pontos foram considerados influentes no modelo: 33, 35, 44 e 45.
+
+Por fim, o teste de RV que verifica a especificação do modelo (necessidade de acrescentar covariáveis não-lineares) não rejeitou a hipótese de que o modelo está bem especificado sem covariáveis adicionais. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+source("MLG/Funcoes/rv.poisson.binomial_simples.txt")
+source("MLG/Funcoes/eta2.pois.txt")
+eta2.pois()
+
+
+```
+INTERPRETAÇÃO DOS COEFICIENTES
+
+Quando nenhuma dose de herbicida é aplicada, o número de ovos eclodidos esperado é 32. Para a dose de 80 mg/L, o número de ovos eclodidos reduz em uma unidade, em relação ao número de ovos eclodidos quando a dose é de nula (0 mg/L). Para a dose de 160, o número de ovos reduz em 4 unidades, para a dose 235, reduz 15 unidades; Por fim, para a dose mais alta, 310 mg/L, o número de ovos eclodidos reduz em 26 unidades em relação ao mesmo cenário sem aplicação do herbicida.      
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+
+summary(fit.model)
+
+```
+
