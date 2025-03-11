@@ -1,0 +1,477 @@
+---
+title: "lista03"
+author: "Gabriela Paschoal"
+date: "2025-03-10"
+output: pdf_document
+---
+
+## Livro Gilberto Paula, cap. 03 (2013)
+
+#### Sumário
+- [Exercício 19](#ex19)
+- [Exercício 23](#ex23)
+- [Exercício 25](#ex25)
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(nortest)
+library(AICcmodavg)
+library(lmtest)
+library(ResourceSelection)  # estatística Hosmer-Lemeshow
+```
+
+#### Exercício 19 {#ex19}
+
+MODELOS INICIAIS (SEM INTERAÇÃO)
+
+Considerei incialmente apenas modelos sem interações por simplicidade, todos binomiais com diferentes ligações. O que apresentou menor AIC e BIC foi o logit.  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'gestantes'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE,fill = TRUE)
+
+colnames(df)<-c("idade","ncigarros","tempogestacao","nao_sobrev","sobrev")
+
+df$idade<-as.factor(df$idade)
+df$ncigarros<-as.factor(df$ncigarros)
+df$tempogestacao<-as.factor(df$tempogestacao)
+
+modelo_logit<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao,
+                  family=binomial(link='logit'), data=df)
+
+modelo_probit<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao,
+                  family=binomial(link='probit'), data=df)
+
+modelo_cloglog<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao,
+                  family=binomial(link='cloglog'), data=df)
+modelo_cauchit<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao,
+                  family=binomial(link='cauchit'), data=df)
+
+
+AIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+BIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+
+```
+
+MODELOS COM INTERAÇÃO
+
+Em seguida, considerei os mesmos modelos com a interação entre idade e número de cigarros. O modelo logit continuou apresentando menores valores para AIC e BIC, no entanto, esses valores ficaram maiores em relação ao modelo sem nenhuma interação de primeira ordem. A ANOVA aplicada a esses dois modelos sugere que a interação, de fato, não é significativa. Portanto, ficaremos com o modelo logit sem nenhuma interação. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+modelo_logit_<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao + idade:ncigarros, family=binomial(link='logit'), data=df)
+
+modelo_probit_<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao + idade:ncigarros,family=binomial(link='probit'), data=df)
+
+modelo_cloglog_<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao +
+                      idade:ncigarros,family=binomial(link='cloglog'), data=df)
+modelo_cauchit_<-glm(cbind(sobrev,nao_sobrev)~idade+ncigarros+tempogestacao+ idade:ncigarros,family=binomial(link='cauchit'), data=df)
+
+
+AIC(modelo_logit_,modelo_probit_,modelo_cloglog_,modelo_cauchit_)
+BIC(modelo_logit_,modelo_probit_,modelo_cloglog_,modelo_cauchit_)
+
+anova(modelo_probit,modelo_probit_)
+
+```
+VERIFICAÇÃO DAS SUPOSIÇÕES DO MODELO
+
+Os resíduos não ficaram dentro do envelope do gráfico quartil-quartil, no entanto, a suposição de normalidade não foi rejeitada pelo teste Shapiro. No entanto, a suposição de homocedasticidade dos resíduos foi rejeitada. 
+
+O teste de adequação do modelo não rejeitou a hipótese de que o modelo está bem especificado (sem necessidade de inclusão de covariáveis extras). Apesar de existirem pontos de alavanca, nenhum deles foi considerado influente pela distância de Cook. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+fit.model<-modelo_logit
+
+source("MLG/Funcoes/envel_bino_logit.txt") 
+
+res<-fit.model$residuals
+hist(res, freq = FALSE)
+shapiro.test(res) #OK
+
+plot(fitted(fit.model),res)
+plot(res)
+bptest(fit.model) # rejeitou homocedasticidade
+
+source("MLG/Funcoes/rv.poisson.binomial_simples.txt")
+source("MLG/Funcoes/eta2.bino.txt")
+eta2.bino(fit.model)
+
+leverage <- hatvalues(fit.model) # use para calcular os valores de leverage
+# leverage ou hii mede o quanto uma observação influencia o ajuste do modelo.
+
+n <- nrow(df)  # numero de obs
+p <- 1        # numero de variaveis independentes
+limite <- 2 * (p + 1) / n #Pontos de alavanca são geralmente identificados quando o valor de leverage é maior que 2 * (p + 1) / n.
+
+pontos_alavanca <- which(leverage > limite)
+
+plot(leverage, main = "Pontos de Alavanca", ylab = "Leverage (hii)")
+abline(h = limite, col = "red", lty = 2)
+points(pontos_alavanca, leverage[pontos_alavanca], col = "red", pch = 19)
+
+# Se você encontrar pontos de alavanca, é importante investigar se eles são influentes (usando métricas como a distância de Cook) e decidir se devem ser tratados ou removidos do modelo.
+
+cook_distance <- cooks.distance(fit.model)
+#  Distância de Cook é uma métrica que combina informações sobre leverage (pontos de alavanca) e resíduos para identificar observações que têm uma influência significativa no modelo de regressão. Pontos com uma Distância de Cook alta podem estar distorcendo os resultados do modelo.
+
+limite_cook <- 4 / n
+pontos_influentes <- which(cook_distance > limite_cook)
+
+plot(cook_distance, main = "Distância de Cook", ylab = "Distância de Cook")
+abline(h = limite_cook, col = "red", lty = 2)
+points(pontos_influentes, cook_distance[pontos_influentes], col = "red", pch = 19)
+
+
+```
+
+INTERPRETAÇÃO DO MODELO
+
+O intercepto não possui interpretação prática. A interpretação para o coeficiente da idade é a seguinte: para mulheres com 30 anos ou mais, a probabilidade de seu bebê sobreviver é multiplicada por $1-e^{-0.4675}\approx0.63$, ou 63%, mantidas as outras variáveis constantes. Em outras palavras, a probabilidade do bebê sobreviver reduz em 37% para mulheres com mais de 30 anos.
+
+Seguindo esse mesmo raciocício, podemos interpretar as variáveis ncigarros (número de cigarros consumidos por dia, categorizado em 2 grupos) e tempogestacao (tempo de gestação da mulher categorizado em 2 grupos): para aquelas que consomem 5 ou mais cigarros por dia, a probabilidade do bebê sobreviver reduz em 34% (em relação às mulheres que consomem menos de 5 cigarros por dia, mantidas as outras variáveis constantes). Para as mulheres cujo tempo de gestação é igual ou superior a 260 dias, a probabilidade do bebê sobreviver aumenta em 2638%, em relação às mulheres com tempo de gestação inferior a 260 dias. 
+
+Dentre as variáveis mencionadas, apenas o número de cigarros fumados por dia não se mostrou significativa a 5%. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+summary(modelo_logit)
+exp(-0.4675)
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+rm(list=ls())
+
+```
+
+#### Exercício 23 {#ex23}
+
+O modelo com menor AIC/BIC foi o binomial com ligação probit. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'dengue'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE,fill = TRUE)
+colnames(df)<-c("idade","nivel","setor","caso")
+
+df$nivel<-as.factor(df$nivel)
+df$setor<-as.factor(df$setor)
+df$caso<-as.factor(df$caso)
+
+modelo_logit<-glm(caso~idade+nivel+setor,
+                  family=binomial(link='logit'), data=df)
+
+modelo_probit<-glm(caso~idade+nivel+setor,
+                  family=binomial(link='probit'), data=df)
+
+modelo_cloglog<-glm(caso~idade+nivel+setor,
+                  family=binomial(link='cloglog'), data=df)
+
+modelo_cauchit<-glm(caso~idade+nivel+setor,
+                  family=binomial(link='cauchit'), data=df)
+
+
+AIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+BIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+
+```
+
+VERIFICAÇÃO DAS SUPOSIÇÕES DO MODELO
+
+As hipóteses de normalidade e homocedasticidade dos resíduos parecem não ter sido atendidas. Apesar disso, o teste de razão de verossimilhança não rejeitou a hipótese de que o modelo está bem especificado (ou, alternativamente, a hipótese de que não há necessidade de inclusão de variáveis não lineares). Algo que pode ser pensado para melhorar isso é a inclusão de variáveis extras (não temos mais dados) ou de interações ao modelo. Também podemos verificar se há a presença de pontos influentes. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+fit.model<-modelo_probit
+
+source("MLG/Funcoes/envel_bino_probit.txt") 
+
+res<-fit.model$residuals
+hist(res, freq = FALSE)
+shapiro.test(res) #OK
+
+plot(fitted(fit.model),res)
+plot(res)
+bptest(fit.model) # rejeitou homocedasticidade
+
+source("MLG/Funcoes/rv.poisson.binomial.txt")
+source("MLG/Funcoes/eta2.bino.txt")
+eta2.bino(fit.model) # OK
+
+```
+VERIFICAÇÃO DE PONTOS INFLUENTES
+
+Os pontos 8, 9, 14, 48, 78, 157 e 195 são considerados influentes (distância de Cook). Para saber se podemos retirá-los ou não, devemos ter conhecimentos da área de aplicação. Talvez, conversar com especialistas da área.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+leverage <- hatvalues(fit.model) # use para calcular os valores de leverage
+# leverage ou hii mede o quanto uma observação influencia o ajuste do modelo.
+
+n <- nrow(df)  # numero de obs
+p <- 1        # numero de variaveis independentes
+limite <- 2 * (p + 1) / n #Pontos de alavanca são geralmente identificados quando o valor de leverage é maior que 2 * (p + 1) / n.
+
+pontos_alavanca <- which(leverage > limite)
+
+plot(leverage, main = "Pontos de Alavanca", ylab = "Leverage (hii)")
+abline(h = limite, col = "red", lty = 2)
+points(pontos_alavanca, leverage[pontos_alavanca], col = "red", pch = 19)
+
+# Se você encontrar pontos de alavanca, é importante investigar se eles são influentes (usando métricas como a distância de Cook) e decidir se devem ser tratados ou removidos do modelo.
+
+cook_distance <- cooks.distance(fit.model)
+#  Distância de Cook é uma métrica que combina informações sobre leverage (pontos de alavanca) e resíduos para identificar observações que têm uma influência significativa no modelo de regressão. Pontos com uma Distância de Cook alta podem estar distorcendo os resultados do modelo.
+
+limite_cook <- 4 / n
+pontos_influentes <- which(cook_distance > limite_cook)
+
+plot(cook_distance, main = "Distância de Cook", ylab = "Distância de Cook")
+abline(h = limite_cook, col = "red", lty = 2)
+points(pontos_influentes, cook_distance[pontos_influentes], col = "red", pch = 19)
+
+
+
+
+
+
+```
+
+MODELOS COM INTERAÇÕES DE PRIMEIRA ORDEM
+
+Considerando os modelos logísticos com interações de primeira ordem, o que apresentou menor AIC/BIC ainda foi o probit. O modelo com interações também apresentou melhores valores de AIC e BIC em relação ao modelo sem interações.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+modelo_logit_<-glm(caso~(idade+nivel+setor)^2,
+                  family=binomial(link='logit'), data=df)
+
+modelo_probit_<-glm(caso~(idade+nivel+setor)^2,
+                  family=binomial(link='probit'), data=df)
+
+modelo_cloglog_<-glm(caso~(idade+nivel+setor)^2,
+                  family=binomial(link='cloglog'), data=df)
+
+modelo_cauchit_<-glm(caso~(idade+nivel+setor)^2,
+                  family=binomial(link='cauchit'), data=df)
+
+
+AIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+BIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+
+summary(modelo_probit_)
+```
+
+VERIFICAÇÃO DAS SUPOSIÇÕES DO MODELO COM INTERAÇÕES
+
+Os resíduos estão bem contidos dentro do envelope no gráfico quartil-quartil,  isso sugere que a distribuição dos resíduos é consistente com a distribuição teórica assumida pelo modelo (normalidade, no caso de muitos modelos lineares generalizados). Em outras palavras, o modelo está capturando adequadamente a estrutura dos dados, e os resíduos não apresentam desvios sistemáticos, padrões não capturados ou outliers extremos.
+
+Além disso, o teste de RV para avaliar se o modelo está bem especificado com termos lineares não rejeitou $H_0$ (boa especificação). 
+
+Por fim, o modelo apresentou alguns pontos influentes.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+fit.model<-modelo_probit_
+
+source("MLG/Funcoes/envel_bino_probit.txt") 
+
+res<-fit.model$residuals
+hist(res, freq = FALSE)
+
+plot(fitted(fit.model),res)
+plot(res)
+bptest(fit.model) # nao rejeitou homocedasticidade
+
+source("MLG/Funcoes/rv.poisson.binomial.txt")
+source("MLG/Funcoes/eta2.bino.txt")
+eta2.bino(fit.model) # OK
+
+```
+
+ESTATÍSTICA HOSMER-LEMESHOW
+
+Para verificação da qualidade do ajuste do modelo. A função hoslem.test() retorna um valor de qui-quadrado que mede a discrepância entre as probabilidades observadas e previstas. A hipótese nula do teste é a de que o modelo está bem ajustado. Como o p-valor >> 0.05, não temos evidências para rejeitar a hipótese de que o modelo está bem ajustado.   
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+# Aplicar o teste de Hosmer-Lemeshow
+teste_hl <- hoslem.test(modelo_probit_$y, fitted(modelo_probit_), g = 10) # g representa os deciles (numero de grupos que dividemos dados, o padrao eh 10)
+teste_hl
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+rm(list=ls())
+
+
+```
+
+
+#### Exercício 25 {#ex25}
+
+MODELOS INICIAIS (SEM INTERAÇÃO)
+
+Considerei incialmente apenas modelos sem interações por simplicidade. O que apresentou menores valores para AIC e BIC foi o binomial com ligação probit.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+txt<-'pulso'
+url <- paste0('https://www.ime.usp.br/~giapaula/',txt,'.txt')
+df <- read.table(url, header = FALSE, dec = ".", stringsAsFactors = FALSE,fill = TRUE)
+
+colnames(df)<-c("pulso","fumo","peso")
+
+df$pulso<-as.factor(df$pulso)
+df$fumo<-as.factor(df$fumo)
+
+df$pulso<-recode(df$pulso, `1`=0,`2`=1) # 0 - baixa, 1 - alta 
+
+modelo_logit<-glm(pulso~fumo+peso,
+                  family=binomial(link='logit'), data=df)
+
+modelo_probit<-glm(pulso~fumo+peso,
+                  family=binomial(link='probit'), data=df)
+
+modelo_cloglog<-glm(pulso~fumo+peso,
+                  family=binomial(link='cloglog'), data=df)
+
+modelo_cauchit<-glm(pulso~fumo+peso,
+                  family=binomial(link='cauchit'), data=df)
+
+
+AIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+BIC(modelo_logit,modelo_probit,modelo_cloglog,modelo_cauchit)
+
+```
+MODELOS COM INTERACAO (FUMO:PESO)
+
+Os modelos com interação apresentaram AIC e BIC maiores. Logo, ficaremos com o modelo SEM interação. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+modelo_logit_<-glm(pulso~fumo*peso,
+                  family=binomial(link='logit'), data=df)
+
+modelo_probit_<-glm(pulso~fumo*peso,
+                  family=binomial(link='probit'), data=df)
+
+modelo_cloglog_<-glm(pulso~fumo*peso,
+                  family=binomial(link='cloglog'), data=df)
+
+modelo_cauchit_<-glm(pulso~fumo*peso,
+                  family=binomial(link='cauchit'), data=df)
+
+
+AIC(modelo_logit_,modelo_probit_,modelo_cloglog_,modelo_cauchit_)
+BIC(modelo_logit_,modelo_probit_,modelo_cloglog_,modelo_cauchit_)
+
+```
+
+
+O MODELO PROBIT AJUSTADO
+
+Homens que não fumam apresentam uma probabilidade 51% menor de pulsação alta (em relação aos homens fumantes, para um valor de peso fixo). Para cada kg a mais de peso, um homem apresenta uma probabilidade 3% menor de pulsação alta. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+summary(modelo_probit)
+
+boxplot(peso~pulso,data=df, main = "Peso pelo Pulso (1=alto)")
+
+```
+
+VERIFICAÇÃO DAS SUPOSIÇÕES
+
+Os resíduos ficaram dentro do envelope - indicativo de que o modelo foi bem ajustado. No entanto, pela análise individual do histograma dos resíduos e do gráfico de dispersão, eles não parecem ser normais nem homocedásticos.
+
+O teste de verificação da qualidade especificação do modelo não rejeitou a hipótese nula (indicativo de que não é necessário acrescentar variáveis extras, como variáveis quadráticas).  
+
+Quatro pontos se mostraram influentes pela distância de Cook. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+fit.model<-modelo_probit
+
+source("MLG/Funcoes/envel_bino_probit.txt") 
+
+res<-fit.model$residuals
+hist(res, freq = FALSE)
+
+plot(fitted(fit.model),res)
+plot(res)
+
+source("MLG/Funcoes/rv.poisson.binomial.txt")
+source("MLG/Funcoes/eta2.bino.txt")
+eta2.bino(fit.model) # OK
+
+
+leverage <- hatvalues(fit.model) # use para calcular os valores de leverage
+# leverage ou hii mede o quanto uma observação influencia o ajuste do modelo.
+
+n <- nrow(df)  # numero de obs
+p <- 1        # numero de variaveis independentes
+limite <- 2 * (p + 1) / n #Pontos de alavanca são geralmente identificados quando o valor de leverage é maior que 2 * (p + 1) / n.
+
+pontos_alavanca <- which(leverage > limite)
+
+plot(leverage, main = "Pontos de Alavanca", ylab = "Leverage (hii)")
+abline(h = limite, col = "red", lty = 2)
+points(pontos_alavanca, leverage[pontos_alavanca], col = "red", pch = 19)
+
+# Se você encontrar pontos de alavanca, é importante investigar se eles são influentes (usando métricas como a distância de Cook) e decidir se devem ser tratados ou removidos do modelo.
+
+cook_distance <- cooks.distance(fit.model)
+#  Distância de Cook é uma métrica que combina informações sobre leverage (pontos de alavanca) e resíduos para identificar observações que têm uma influência significativa no modelo de regressão. Pontos com uma Distância de Cook alta podem estar distorcendo os resultados do modelo.
+
+limite_cook <- 4 / n
+pontos_influentes <- which(cook_distance > limite_cook)
+
+plot(cook_distance, main = "Distância de Cook", ylab = "Distância de Cook")
+abline(h = limite_cook, col = "red", lty = 2)
+points(pontos_influentes, cook_distance[pontos_influentes], col = "red", pch = 19)
+
+library(pROC)
+roc_curve <- roc(df$pulso, fitted(modelo_probit))
+plot(roc_curve, main = "Curva ROC")
+auc(roc_curve)  # Área sob a curva (AUC)
+
+```
+CURVAS AJUSTADAS
+
+curvas ajustadas para cada grupo de hábito de fumar com as respectivas bandas de confiança de 95%. Lembrando que a variável "fumo" foi recodificada de maneira que 1 representa fumantes e 0, não fumantes. Foi criado um novo grid de 100 valores para a variável peso (dados fictícios), associou-se esses valores a fumantes e repetiu-se os dados para não-fumantes, ficando ao total com 200 observações.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=4, fig.height=3, fig.align='center'}
+
+# Criar um grid de valores para peso (dados fictícios)
+df_ <- expand.grid(
+  peso = seq(min(df$peso), max(df$peso), length.out = 100),
+  fumo = levels(df$fumo)
+)
+
+predicoes <- predict(modelo_probit, newdata = df_, type = "response", se.fit = TRUE)
+df_$prob <- predicoes$fit
+df_$lower <- predicoes$fit - 1.96 * predicoes$se.fit
+df_$upper <- predicoes$fit + 1.96 * predicoes$se.fit
+
+ggplot(df_, aes(x = peso, y = prob, color = fumo, fill = fumo)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  labs(
+    title = "Probabilidade de pulsação alta por peso e hábito de fumar",
+    x = "Peso (kg)",
+    y = "Probabilidade de pulsação alta",
+    color = "Fuma",
+    fill = "Fuma"
+  ) +
+  theme_minimal()
+
+```
+  
