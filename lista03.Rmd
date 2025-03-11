@@ -5,6 +5,8 @@ date: "2025-03-10"
 output: pdf_document
 ---
 
+ULTIMA ATUALIZACAO: 10/03/25 - 16:10h
+
 ## Livro Gilberto Paula, cap. 03 (2013)
 
 #### Sumário
